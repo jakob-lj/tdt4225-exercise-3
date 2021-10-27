@@ -132,7 +132,7 @@ if __name__ == '__main__':
 
         total = len(threadsQue)
 
-        for i in range(10):
+        for i in range(20):
             t = threading.Thread(target=worker)
             t.start()
             threads.append(t)
