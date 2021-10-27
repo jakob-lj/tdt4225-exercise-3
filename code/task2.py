@@ -37,6 +37,19 @@ def task2(connector, totalAcitivites=16048):
 
 
 def task3(connector):
+    aggregation = connector.db[USER_COLLECTION].aggregate([
+        {"$project": {"count": {"$size": "$activities"},
+                      "textIdentifier": "$textIdentifier"}},
+        {"$sort": {"count": -1}},
+        {"$limit": 10}
+    ])
+    print("The top 10 most axtive users:")
+    print("User, activity")
+    for u in aggregation:
+        print("%4s | %8s" % (u['textIdentifier'], u['count']))
+
+
+def task4(connector):
     pass
 
 
@@ -47,4 +60,6 @@ if __name__ == '__main__':
 
     # task2(connector, totalNumbers['activities'])
 
-    task3(connector)
+    # task3(connector)
+
+    task4(connector)
