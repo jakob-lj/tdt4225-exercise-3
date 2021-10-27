@@ -33,10 +33,10 @@ def formatLine(line, activity):
     return {'lat': latitude, 'long': longitude, 'altitude': altitude, 'timestamp': timestamp, '_id': id, 'activityId': activity['id']}
 
 
-def insertActivity(col, activity, label, trackingPointIds, userId):
+def insertActivity(col, activity, label, trackingPointIds, userId, start, end):
 
     col.insert_one({'_id': activity['id'], 'activity': activity['name'], 'label': label,
-                   'trackingPoints': trackingPointIds, 'userId': userId})
+                   'trackingPoints': trackingPointIds, 'userId': userId, 'start': start, 'end': end})
 
 
 def insertTrackingPoints(trackingPointCollection, results):
@@ -69,7 +69,7 @@ def readActivity(trackingPointCollection, activityCollection, activity, fileId, 
 
         insertTrackingPoints(trackingPointCollection, results)
         insertActivity(activityCollection, activity,
-                       currentLabel, [x['_id'] for x in results], userId)
+                       currentLabel, [x['_id'] for x in results], userId, results[0]['timestamp'], results[-1]['timestamp'])
 
 
 def readActivities(fileId, hasLabels=False):

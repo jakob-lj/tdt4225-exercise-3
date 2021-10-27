@@ -50,7 +50,36 @@ def task3(connector):
 
 
 def task4(connector):
-    pass
+    pipeline = [
+        {"$project": {"activity": "$activity", "userId": "$userId", "start": {"$dateToString": {
+            "format": "%Y-%m-%d", "date": "$start"}}, "end": {"$dateToString": {"format": "%Y-%m-%d", "date": "$end"}}}},
+        {"$match": {"$expr": {"$ne": ["$start", "$end"]}}},
+        {"$group": {"_id": "$userId"}},
+        {"$group": {"_id": "null", "count": {"$count": {}}}}
+    ]
+
+    results = connector.db[ACTIVITY_COLLECTION].aggregate(pipeline)
+    print("Number of users that have activites starting in one day and ending in another:", list(
+        results)[0]['count'])
+
+
+def task7(connector):
+
+    def getUserById(id):
+        res = connector.db[USER_COLLECTION].find({"_id": id})
+        return res[0]
+
+    pipeline = [
+        {"$match": {"label": {"$ne": "taxi"}}}, {"$group": {"_id": "$userId"}}
+    ]
+    usersWhoHaveNeverTakenTaxi = connector.db[ACTIVITY_COLLECTION].aggregate(
+        pipeline)
+
+    print("Users who have never taken taxi:")
+    sortedList = sorted(([getUserById(u['_id'])['textIdentifier']
+                        for u in usersWhoHaveNeverTakenTaxi]))
+    for s in sortedList:
+        print(s)
 
 
 if __name__ == '__main__':
@@ -62,4 +91,6 @@ if __name__ == '__main__':
 
     # task3(connector)
 
-    task4(connector)
+    # task4(connector)
+
+    task7(connector)
