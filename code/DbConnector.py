@@ -15,9 +15,11 @@ class DbConnector:
     def __init__(self,
                  DATABASE='tdt4225',
                  HOST="localhost",
-                 USER="user",
+                 USER="u",
                  PASSWORD="password"):
-        uri = "mongodb://%s:%s@%s/%s" % (USER, PASSWORD, HOST, DATABASE)
+        uri = "mongodb://%s:%s@%s:27017/%s?authSource=admin" % (
+            USER, PASSWORD, HOST, DATABASE)
+        print(uri)
         # Connect to the databases
         try:
             self.client = MongoClient(uri)

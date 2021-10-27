@@ -1,6 +1,9 @@
 import os
 import datetime
 import threading
+import uuid
+from DbConnector import DbConnector
+from bson.objectid import ObjectId
 
 relPath = "../dataset/dataset/Data"
 
@@ -9,6 +12,13 @@ files = sorted(os.listdir(relPath))
 DATASET_STANDARD_LABEL_DATE_FORMAT = "%Y/%m/%d %H:%M:%S"
 
 threads = []
+threadsQue = []
+total = 0
+running = True
+
+USER_COLLECTION = "User"
+ACTIVITY_COLLECTION = "Activity"
+TRACKING_POINT_COLLECTION = "TrackingPoint"
 
 
 def formatLine(line):
@@ -18,25 +28,55 @@ def formatLine(line):
     altitude = lineElements[3]
     timestamp = datetime.datetime.strptime(
         lineElements[5] + " " + lineElements[6], "%Y-%m-%d %H:%M:%S")
-    return [latitude, longitude, altitude, timestamp]
+
+    id = ObjectId()
+    return {'lat': latitude, 'long': longitude, 'altitude': altitude, 'timestamp': timestamp, '_id': id}
 
 
-def readActivity(activity, fileId, labels):
+def insertActivity(col, activity, label, trackingPointIds):
+
+    col.insert_one({'_id': activity['id'], 'activity': activity['name'], 'label': label,
+                   'trackingPoints': trackingPointIds})
+
+
+def insertTrackingPoints(trackingPointCollection, results):
+    trackingPointCollection.insert_many(results)
+
+
+def insertUser(userCollection, activities, hasLabels):
+    userCollection.insert_one(
+        {'activities': [x['id'] for x in activities], 'hasLabels': hasLabels})
+
+
+def readActivity(trackingPointCollection, activityCollection, activity, fileId, labels):
     currentLabel = None
-    print(activity)
 
-    with open(relPath + "/" + fileId + "/Trajectory/" + activity) as f:
+    with open(relPath + "/" + fileId + "/Trajectory/" + activity['name'] + ".plt") as f:
         data = [x.strip() for x in f.readlines()][6:]
+        if len(data) > 2500:
+            return
+
         results = []
         for line in data:
-            results.append(formatLine(line))
+            formattedLine = (formatLine(line))
+            results.append(formattedLine)
 
-        print(results)
+        for l in labels:
+            if (l[0] == results[0]['timestamp']):
+                if (l[1] == results[-1]['timestamp']):
+                    currentLabel = l[2]
+                    break
+
+        insertTrackingPoints(trackingPointCollection, results)
+        insertActivity(activityCollection, activity,
+                       currentLabel, [x['_id'] for x in results])
 
 
 def readActivities(fileId, hasLabels=False):
+    connection = DbConnector()
     labels = []
-    activities = os.listdir(relPath + "/" + fileId + "/Trajectory")
+    activities = [{'name': str(x).split(".")[0], 'id':ObjectId()} for x in os.listdir(
+        relPath + "/" + fileId + "/Trajectory")]
     if (hasLabels):
         with open(relPath + "/" + fileId + "/labels.txt", "r") as f:
             labelData = [x.strip().replace("\t", " ").split()
@@ -45,15 +85,57 @@ def readActivities(fileId, hasLabels=False):
                 x[2] + " " + x[3], DATASET_STANDARD_LABEL_DATE_FORMAT), x[4]] for x in labelData]
 
     for activity in activities:
-        readActivity(activity, fileId, labels)
-        break
+        readActivity(
+            connection.db[TRACKING_POINT_COLLECTION], connection.db[ACTIVITY_COLLECTION], activity, fileId, labels)
+
+    insertUser(connection.db[USER_COLLECTION], activities, hasLabels)
 
 
-for file in files:
-    if (file == "010"):
-        users = os.listdir(relPath + "/" + file)
-        readActivities(file, "labels.txt" in users)
-        print(users)
-        print(file)
-    else:
-        continue
+def worker():
+    global threadsQue
+    global running
+    global total
+
+    while len(threadsQue) > 0:
+        current = threadsQue.pop(0)
+        print("working with", current)
+        readActivities(current['file'], current['hasLabels'])
+        print("finished", current)
+        print(len(threadsQue) / total * 100)
+
+
+if __name__ == '__main__':
+
+    rootConn = DbConnector()
+    dryRun = False
+    activated = True
+
+    if (not dryRun):
+        rootConn.db[USER_COLLECTION].drop()
+        rootConn.db[ACTIVITY_COLLECTION].drop()
+        rootConn.db[TRACKING_POINT_COLLECTION].drop()
+        rootConn.db.create_collection(USER_COLLECTION)
+        rootConn.db.create_collection(ACTIVITY_COLLECTION)
+        rootConn.db.create_collection(TRACKING_POINT_COLLECTION)
+
+    if (not dryRun):
+        for file in files:
+            if (file == "010" or file == "001" or activated):
+                users = os.listdir(relPath + "/" + file)
+                threadsQue.append(
+                    {'file': file, 'hasLabels': "labels.txt" in users})
+                print("adding", file)
+            else:
+                continue
+
+        total = len(threadsQue)
+
+        for i in range(10):
+            t = threading.Thread(target=worker)
+            t.start()
+            threads.append(t)
+
+        for t in threads:
+            t.join()
+
+    print("Done!")
