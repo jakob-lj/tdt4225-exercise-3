@@ -21,7 +21,7 @@ ACTIVITY_COLLECTION = "Activity"
 TRACKING_POINT_COLLECTION = "TrackingPoint"
 
 
-def formatLine(line):
+def formatLine(line, activity):
     lineElements = line.split(",")
     latitude = lineElements[0]
     longitude = lineElements[1]
@@ -30,25 +30,25 @@ def formatLine(line):
         lineElements[5] + " " + lineElements[6], "%Y-%m-%d %H:%M:%S")
 
     id = ObjectId()
-    return {'lat': latitude, 'long': longitude, 'altitude': altitude, 'timestamp': timestamp, '_id': id}
+    return {'lat': latitude, 'long': longitude, 'altitude': altitude, 'timestamp': timestamp, '_id': id, 'activityId': activity['id']}
 
 
-def insertActivity(col, activity, label, trackingPointIds):
+def insertActivity(col, activity, label, trackingPointIds, userId):
 
     col.insert_one({'_id': activity['id'], 'activity': activity['name'], 'label': label,
-                   'trackingPoints': trackingPointIds})
+                   'trackingPoints': trackingPointIds, 'userId': userId})
 
 
 def insertTrackingPoints(trackingPointCollection, results):
     trackingPointCollection.insert_many(results)
 
 
-def insertUser(userCollection, activities, hasLabels):
+def insertUser(userCollection, userId, fileId, activities, hasLabels):
     userCollection.insert_one(
-        {'activities': [x['id'] for x in activities], 'hasLabels': hasLabels})
+        {'_id': userId, 'activities': [x['id'] for x in activities], 'textIdentifier': fileId, 'hasLabels': hasLabels})
 
 
-def readActivity(trackingPointCollection, activityCollection, activity, fileId, labels):
+def readActivity(trackingPointCollection, activityCollection, activity, fileId, labels, userId):
     currentLabel = None
 
     with open(relPath + "/" + fileId + "/Trajectory/" + activity['name'] + ".plt") as f:
@@ -58,7 +58,7 @@ def readActivity(trackingPointCollection, activityCollection, activity, fileId, 
 
         results = []
         for line in data:
-            formattedLine = (formatLine(line))
+            formattedLine = (formatLine(line, activity))
             results.append(formattedLine)
 
         for l in labels:
@@ -69,12 +69,13 @@ def readActivity(trackingPointCollection, activityCollection, activity, fileId, 
 
         insertTrackingPoints(trackingPointCollection, results)
         insertActivity(activityCollection, activity,
-                       currentLabel, [x['_id'] for x in results])
+                       currentLabel, [x['_id'] for x in results], userId)
 
 
 def readActivities(fileId, hasLabels=False):
     connection = DbConnector()
     labels = []
+    userId = ObjectId()
     activities = [{'name': str(x).split(".")[0], 'id':ObjectId()} for x in os.listdir(
         relPath + "/" + fileId + "/Trajectory")]
     if (hasLabels):
@@ -86,9 +87,10 @@ def readActivities(fileId, hasLabels=False):
 
     for activity in activities:
         readActivity(
-            connection.db[TRACKING_POINT_COLLECTION], connection.db[ACTIVITY_COLLECTION], activity, fileId, labels)
+            connection.db[TRACKING_POINT_COLLECTION], connection.db[ACTIVITY_COLLECTION], activity, fileId, labels, userId)
 
-    insertUser(connection.db[USER_COLLECTION], activities, hasLabels)
+    insertUser(connection.db[USER_COLLECTION],
+               userId, fileId, activities, hasLabels)
 
 
 def worker():
